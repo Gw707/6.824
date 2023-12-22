@@ -198,23 +198,24 @@ func reduceWorker1(reducef func(string, []string) string, ch chan Job) {
 	args := <-ch
 	args.WorkType = 2
 
-	reply := Job{}
+	//reply := Job{}
 	fmt.Println("begin reduce call")
 	fmt.Print(args)
-	call("Master.Reduce", &args, &reply)
 
-	fmt.Print("Master.Reduce调用后")
-	fmt.Print(reply)
+	//调用master修改Job状态，以及更新Job的执行时间
+	//call("Master.Reduce", &args, &reply)
+
+	//fmt.Print(reply)
 
 	fmt.Println("end reduce call")
 	if args.State == 7 {
 	}
 
-	mp := reply.Mp
+	mp := make(map[string][]string)
 
 	fmt.Print(mp)
 	//Res为map之后的结果，将相同的word进行拼接
-	for _, word := range reply.Res {
+	for _, word := range args.Res {
 		mp[word.Key] = append(mp[word.Key], word.Value)
 	}
 	//file, _ := os.Open("mr-out-" + job.JobId)
