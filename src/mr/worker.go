@@ -3,6 +3,7 @@ package mr
 import (
 	"fmt"
 	"os"
+	"sync"
 	"time"
 )
 import "log"
@@ -29,20 +30,71 @@ func Worker(mapf func(string, string) []KeyValue,
 
 	//TODO 开启通信
 
-	ch := make(chan Job, 5)
-	for i := 0; i < 5; i++ {
-		go mapWorker(mapf, ch)
-	}
+	ch := make(chan Job, 10)
 
-	for i := 0; i < 5; i++ {
-		go reduceWorker(reducef, ch)
-	}
+	//开启十个线程处理map
+	//nMap := 10
+	//for i := 0; i < nMap; i++ {
+	mapWorker1(mapf, ch)
+	//}
+	reduceWorker1(reducef, ch)
+
+	//处理完map后处理reduce
+	//
+	//job := <-ch
+	//nReduce := job.LimitThreads
+
+	//for i := 0; i < nReduce; i++ {
+	//
+	//
+	//
+	//}
+
+	//for i := 0; i < 5; i++ {
+	//	fmt.Println("worker开始进行map工作")
+	//	go mapWorker(mapf, ch)
+	//}
+	//
+	//for i := 0; i < 5; i++ {
+	//	fmt.Println("worker开始进行reduce工作")
+	//	go reduceWorker(reducef, ch)
+	//}
 
 	//结束通信
 	// Your worker implementation here.
 
 	// uncomment to send the Example RPC to the master.
 	// CallExample()
+
+}
+
+func mapWorker1(mapf func(string, string) []KeyValue, ch chan Job) {
+	var lock sync.Mutex
+	lock.Lock()
+	defer lock.Unlock()
+
+	args := Job{
+		JobId:      "-1",
+		WorkType:   1,
+		SourceFile: "",
+		State:      0,
+	}
+	reply := Job{}
+
+	b := call("Master.Map", &args, &reply)
+	fmt.Println("调用结果：")
+	fmt.Println(b)
+	//fmt.Println(reply)
+	sourceFile := reply.SourceFile
+
+	content := fileRead(sourceFile)
+
+	//fmt.Println(content)
+	reply.Res = mapf(sourceFile, content)
+
+	//fmt.Println(reply)
+
+	ch <- reply
 
 }
 
@@ -53,7 +105,11 @@ func mapWorker(mapf func(string, string) []KeyValue, ch chan Job) {
 		job := Job{}
 		job.WorkType = 1
 		job.JobId = "-1"
+		fmt.Println("begin map call")
+		fmt.Println("begin map call")
+		//job.print()
 		call("Master.Map", &job, &job)
+		fmt.Println("end map call")
 		if job.State == 6 {
 			break
 		}
@@ -74,18 +130,46 @@ func mapWorker(mapf func(string, string) []KeyValue, ch chan Job) {
 		job.State = 3
 		//TODO map工作完成返回
 		//call...
+
 		ch <- job
 	}
 
 }
 
+func fileRead(filename string) string {
+
+	file, err := os.Open(filename)
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+	defer file.Close()
+
+	fileinfo, err := file.Stat()
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+
+	filesize := fileinfo.Size()
+	buffer := make([]byte, filesize)
+
+	bytesread, err := file.Read(buffer)
+	if err != nil {
+		fmt.Println(err, bytesread)
+		return ""
+	}
+
+	return string(buffer)
+}
 func reduceWorker(reducef func(string, []string) string, ch chan Job) {
 	for true {
 		time.Sleep(200)
 		job := <-ch
 		job.WorkType = 2
+		fmt.Println("begin reduce call")
 		call("Master.Reduce", &job, &job)
-
+		fmt.Println("end reduce call")
 		if job.State == 7 {
 			break
 		}
@@ -94,7 +178,7 @@ func reduceWorker(reducef func(string, []string) string, ch chan Job) {
 		for _, word := range job.Res {
 			mp[word.Key] = append(mp[word.Key], word.Value)
 		}
-		file, _ := os.Open("mr-out-1")
+		file, _ := os.Open("mr-out-" + job.JobId)
 
 		for key, value := range mp {
 			cnt := reducef(key, value)
@@ -106,6 +190,45 @@ func reduceWorker(reducef func(string, []string) string, ch chan Job) {
 		//TODO reduce工作完成返回
 		//call...
 	}
+
+}
+
+func reduceWorker1(reducef func(string, []string) string, ch chan Job) {
+
+	args := <-ch
+	args.WorkType = 2
+
+	reply := Job{}
+	fmt.Println("begin reduce call")
+	fmt.Print(args)
+	call("Master.Reduce", &args, &reply)
+
+	fmt.Print("Master.Reduce调用后")
+	fmt.Print(reply)
+
+	fmt.Println("end reduce call")
+	if args.State == 7 {
+	}
+
+	mp := reply.Mp
+
+	fmt.Print(mp)
+	//Res为map之后的结果，将相同的word进行拼接
+	for _, word := range reply.Res {
+		mp[word.Key] = append(mp[word.Key], word.Value)
+	}
+	//file, _ := os.Open("mr-out-" + job.JobId)
+
+	for key, value := range mp {
+		cnt := reducef(key, value)
+		str := key + " " + cnt
+		fmt.Println(str)
+		//file.Write([]byte(str))
+	}
+	args.State = 5
+
+	//TODO reduce工作完成返回
+	//call...
 
 }
 

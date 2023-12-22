@@ -21,6 +21,7 @@ func main() {
 	}
 
 	m := mr.MakeMaster(os.Args[1:], 10)
+	fmt.Println("master初始化完成")
 	for m.Done() == false {
 		time.Sleep(time.Second)
 	}

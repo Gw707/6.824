@@ -1,6 +1,7 @@
 package mr
 
 import (
+	"fmt"
 	"log"
 	"strconv"
 	"sync"
@@ -31,46 +32,73 @@ type Master struct {
 // an example RPC handler.
 //
 // the RPC argument and reply types are defined in rpc.go.
-func (m *Master) Map(args *Job, reply *Job) error {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	//分发map类型的job
-	reply = args
-	workType := args.WorkType
-	if workType == 2 || reply.State > 1 {
-		reply.Status = false
-		reply.Mes = "Job mapped!!!"
-		return nil
-	}
-
-	if reply.JobId == "-1" {
-		reply.Status = false
-		reply.Mes = "no Job to map!!!"
-		flag := true
-		for _, job := range m.jobList {
-			if job.State < 3 {
-				flag = false
-			}
-		}
-		if flag {
-			reply.State = 6
-		}
-		return nil
-	}
-
-	for _, job := range m.jobList {
-		state := job.State
-		if state == 1 {
-			reply = &job //给worker分配任务，将状态置为 mapping - 2
-			reply.State = 2
-			reply.Status = true
-			reply.Mes = "success"
-			break
-		}
-	}
-
-	m.autoFlush(reply)
+func (m *Master) ExampleRpc(args *ExampleArgs, reply *ExampleArgs) error {
+	reply.JobId = "3"
+	reply.WorkType = 2
+	reply.SourceFile = "pg-sherlock_holmes.txt"
+	reply.State = 1
 	return nil
+}
+
+func (m *Master) Map(args *Job, reply *Job) error {
+	//分发map类型的job
+	//reply.JobId = "3"
+
+	//for _, job := range m.jobList {
+	//	fmt.Println(job)
+	//}
+
+	//fmt.Println(m.jobList[0])
+	copy(reply, m.jobList[0])
+
+	return nil
+	//reply = args
+	//workType := args.WorkType
+	//if workType == 2 || reply.State > 1 {
+	//	reply.Status = false
+	//	reply.Mes = "Job mapped!!!"
+	//	return nil
+	//}
+	//
+	//if reply.JobId == "-1" {
+	//	reply.Status = false
+	//	reply.Mes = "no Job to map!!!"
+	//	flag := true
+	//	for _, job := range m.jobList {
+	//		if job.State < 3 {
+	//			flag = false
+	//		}
+	//	}
+	//	if flag {
+	//		reply.State = 6
+	//	}
+	//	return nil
+	//}
+	//
+	//for _, job := range m.jobList {
+	//	state := job.State
+	//	if state == 1 {
+	//		reply = &job //给worker分配任务，将状态置为 mapping - 2
+	//		reply.State = 2
+	//		reply.Status = true
+	//		reply.Mes = "success"
+	//		break
+	//	}
+	//}
+	//
+	//m.autoFlush(reply)
+	//return nil
+}
+
+func copy(target *Job, source Job) {
+	target.JobId = source.JobId
+	target.Mes = source.Mes
+	target.WorkType = source.WorkType
+	target.State = source.State
+	target.Status = source.Status
+	target.Mp = source.Mp
+	target.Res = source.Res
+	target.SourceFile = source.SourceFile
 }
 
 func (m *Master) Reduce(args *Job, reply *Job) error {
@@ -180,26 +208,27 @@ func (m *Master) Done() bool {
 func MakeMaster(files []string, nReduce int) *Master {
 	m := Master{}
 	m.mapFiles = files
-	m.jobList = make([]Job, len(files))
+	m.jobList = make([]Job, 0)
 	m.LimitThreads = nReduce
-	m.timeStamp = make([]int64, len(files))
+	m.timeStamp = make([]int64, 0)
 	m.jobCount = 0
 
 	//将job封装好
 	for _, file := range files {
 		job := Job{
-			JobId:      string(m.jobCount),
-			WorkType:   1,
-			SourceFile: file,
-			State:      1,
+			JobId:        string(m.jobCount),
+			WorkType:     1,
+			SourceFile:   file,
+			State:        1,
+			LimitThreads: nReduce,
 		}
 		m.jobCount++
 		m.jobList = append(m.jobList, job)
 	}
-
+	fmt.Println("master初始化数据完成")
 	//开启线程定期检查job处理情况
 	go m.checkTime()
-	m.server()
+	go m.server()
 	return &m
 }
 
