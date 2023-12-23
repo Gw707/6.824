@@ -32,12 +32,15 @@ func Worker(mapf func(string, string) []KeyValue,
 
 	ch := make(chan Job, 10)
 
-	//开启十个线程处理map
+	//开启十个线程处理map，map工作while(true)
 	//nMap := 10
 	//for i := 0; i < nMap; i++ {
 	mapWorker1(mapf, ch)
 	//}
-	reduceWorker1(reducef, ch)
+
+	for i := 0; i < 10; i++ {
+		go reduceWorker1(reducef, ch)
+	}
 
 	//处理完map后处理reduce
 	//
@@ -91,6 +94,9 @@ func mapWorker1(mapf func(string, string) []KeyValue, ch chan Job) {
 
 	//fmt.Println(content)
 	reply.Res = mapf(sourceFile, content)
+
+	//map完成后通知master修改job状态，刷新处理时间，防止master超时重试
+	//TODO call()....
 
 	//fmt.Println(reply)
 
@@ -194,10 +200,14 @@ func reduceWorker(reducef func(string, []string) string, ch chan Job) {
 }
 
 func reduceWorker1(reducef func(string, []string) string, ch chan Job) {
+	mutex := sync.Mutex{}
+	mutex.Lock()
+	defer mutex.Unlock()
 
 	args := <-ch
 	args.WorkType = 2
 
+	nReduce := args.LimitThreads
 	//reply := Job{}
 	fmt.Println("begin reduce call")
 	fmt.Print(args)
@@ -218,14 +228,24 @@ func reduceWorker1(reducef func(string, []string) string, ch chan Job) {
 	for _, word := range args.Res {
 		mp[word.Key] = append(mp[word.Key], word.Value)
 	}
-	//file, _ := os.Open("mr-out-" + job.JobId)
 
 	for key, value := range mp {
 		cnt := reducef(key, value)
-		str := key + " " + cnt
+		seq := ihash(key) % nReduce
+		file, err := os.Open("mr-out-" + string(seq))
+		if err != nil {
+			file, _ = os.Create("mr-out-" + string(seq))
+			if err != nil {
+				fmt.Println("创建文件失败")
+			}
+		}
+
+		str := key + " " + cnt + "\n"
 		fmt.Println(str)
-		//file.Write([]byte(str))
+		file.Write([]byte(str))
 	}
+
+	fmt.Println("写入成功")
 	args.State = 5
 
 	//TODO reduce工作完成返回

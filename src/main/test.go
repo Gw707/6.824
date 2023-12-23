@@ -11,7 +11,7 @@ func main() {
 	//after := strings.SplitAfter(str, "/")
 	//fmt.Println(after[1])
 
-	file, err := os.Open("../pg-being_ernest.txt")
+	file, err := os.Open("pg-being_ernest.txt")
 	if err != nil {
 		fmt.Println(err)
 		return
